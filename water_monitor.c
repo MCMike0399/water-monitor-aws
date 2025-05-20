@@ -100,7 +100,7 @@ void conectar_wifi() {
   
   // Intentar conectar a la red WiFi
   while (status != WL_CONNECTED) {
-    Serial.print("Intentando conectar a SSID: ");
+    Serial.print("Intentando conectar a SSID: ...");
     Serial.println(ssid);
     
     // Para redes abiertas (sin contraseña)
