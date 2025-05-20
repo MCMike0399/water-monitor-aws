@@ -15,11 +15,16 @@ char pass[] = SECRET_PASS;
 
 // Definición de pines ADC
 #define TURBIDITY_PIN A0
-#define PH_PIN        A2
-#define CONDUCT_PIN   A4
+#define PH_PIN        A1
+#define CONDUCT_PIN   A2
+
+#define USE_KEEP_ALIVE true
+const unsigned long RECONNECT_INTERVAL = 60000; // 1 minute
+unsigned long lastConnectionTime = 0;
+bool isConnected = false;
 
 // Configuración del servidor
-const char* server_host = "18.100.55.6";
+const char* server_host = "51.92.64.38";
 const int server_port = 8000;
 const char* server_path = "/water-monitor/publish";
 
@@ -61,6 +66,16 @@ void loop() {
     Serial.println("Reconectando a WiFi...");
     conectar_wifi();
     return;
+  }
+
+   // Check server connection periodically
+  if (USE_KEEP_ALIVE && isConnected) {
+    unsigned long currentTime = millis();
+    if (currentTime - lastConnectionTime >= RECONNECT_INTERVAL) {
+      client.stop();
+      isConnected = false;
+      lastConnectionTime = currentTime;
+    }
   }
   
   // Verificar si es tiempo de enviar una actualización
@@ -108,86 +123,86 @@ void conectar_wifi() {
 }
 
 void enviar_datos_sensores() {
-  // Leer valores de los sensores
+  // Read sensors (keep existing code)
   uint16_t turbidez_raw = leer_adc(TURBIDITY_PIN);
   uint16_t ph_raw = leer_adc(PH_PIN);
   uint16_t conductividad_raw = leer_adc(CONDUCT_PIN);
   
-  // Convertir a valores estandarizados
+  // Convert values (keep existing code)
   float turbidez = convertir_turbidez(turbidez_raw);
   float ph = convertir_ph(ph_raw);
   float salinidad = convertir_salinidad(conductividad_raw);
   
-  // Imprimir formato Arduino para referencia
-  Serial.print("Formato Arduino: T:");
-  Serial.print(turbidez, 2);
-  Serial.print(";PH:");
-  Serial.print(ph, 2);
-  Serial.print(";C:");
-  Serial.print(salinidad, 2);
-  Serial.println();
+  // Reduce serial output frequency
+  static int print_counter = 0;
+  if (++print_counter >= 5) {
+    print_counter = 0;
+    Serial.print("Datos: T:");
+    Serial.print(turbidez, 2);
+    Serial.print(";PH:");
+    Serial.print(ph, 2);
+    Serial.print(";C:");
+    Serial.println(salinidad, 2);
+  }
   
-  float turbidez_redondeado = round(turbidez * 100) / 100.0;
-  float ph_redondeado = round(ph * 100) / 100.0;
-  float salinidad_redondeado = round(salinidad * 100) / 100.0;
-  
+  // Create JSON (unchanged)
   StaticJsonDocument<200> doc;
-  doc["T"] = turbidez_redondeado;
-  doc["PH"] = ph_redondeado;
-  doc["C"] = salinidad_redondeado;
+  doc["T"] = round(turbidez * 100) / 100.0;
+  doc["PH"] = round(ph * 100) / 100.0;
+  doc["C"] = round(salinidad * 100) / 100.0;
   
-  // Serializar JSON a String
   String json;
   serializeJson(doc, json);
   
-  Serial.print("Enviando datos: ");
-  Serial.println(json);
+  // Manage connection
+  if (!isConnected) {
+    if (!client.connect(server_host, server_port)) {
+      Serial.println("Fallo en conexión al servidor");
+      return;
+    }
+    isConnected = true;
+    Serial.println("Conectado al servidor");
+  }
   
-  // Conectar al servidor
-  Serial.print("Conectando a ");
-  Serial.println(server_host);
+  // Minimized HTTP request
+  client.print("POST ");
+  client.print(server_path);
+  client.println(" HTTP/1.1");
+  client.print("Host: ");
+  client.println(server_host);
+  client.println(USE_KEEP_ALIVE ? "Connection: keep-alive" : "Connection: close");
+  client.println("Content-Type: application/json");
+  client.print("Content-Length: ");
+  client.println(json.length());
+  client.println();  // Blank line is crucial
+  client.print(json);
+  client.flush();  // Force data transmission
   
-  if (client.connect(server_host, server_port)) {
-    Serial.println("Conectado al servidor...");
-    
-    // Preparar solicitud HTTP POST
-    client.println("POST " + String(server_path) + " HTTP/1.1");
-    client.println("Host: " + String(server_host));
-    client.println("Connection: close");
-    client.println("Content-Type: application/json");
-    client.println("Accept: application/json");  // Añadir encabezado Accept
-    client.println("User-Agent: ArduinoR4Client/1.0");  // Añadir User-Agent
-    client.print("Content-Length: ");
-    client.println(json.length());
-    client.println();  // Línea en blanco entre encabezados y cuerpo
-    client.print(json);  // Usar print en lugar de println para el cuerpo
-    
-    // Esperar respuesta del servidor
-    unsigned long timeout = millis();
-    while (client.connected() && millis() - timeout < 10000) {
-      if (client.available()) {
-        String line = client.readStringUntil('\n');
-        Serial.println(line);
-        if (line == "\r") {
-          break;
-        }
+  // Minimal response processing
+  unsigned long timeout = millis();
+  bool headerEnded = false;
+  
+  while (client.connected() && (millis() - timeout < 1000)) {
+    if (client.available()) {
+      String line = client.readStringUntil('\n');
+      if (line == "\r") {
+        headerEnded = true;
+        break;
       }
     }
-    
-    // Leer el cuerpo de la respuesta
-    while (client.available()) {
-      String line = client.readStringUntil('\n');
-      Serial.println(line);
-    }
-    
+  }
+  
+  // Drain any remaining response data
+  while (client.available()) {
+    client.read();
+  }
+  
+  // Handle connection based on keep-alive setting
+  if (!USE_KEEP_ALIVE) {
     client.stop();
-    Serial.println("Conexión cerrada");
-  } else {
-    Serial.println("Fallo en conexión al servidor");
-    client.stop();
+    isConnected = false;
   }
 }
-
 // Función para leer ADC con promedio
 uint16_t leer_adc(uint8_t pin) {
   uint32_t sum = 0;

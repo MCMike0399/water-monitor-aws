@@ -1,6 +1,6 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 import json
 import logging
 import asyncio
@@ -26,36 +26,38 @@ use_mock_data = True
 mock_data_task = None
 
 async def http_publisher_endpoint(request: Request):
-    """Endpoint HTTP para publicadores (Arduino)"""
+    """Optimized HTTP endpoint for Arduino"""
     global latest_data, use_mock_data
     
     try:
-        # Parsear el cuerpo de la petición como JSON
-        json_data = await request.json()
-        logger.info(f"Datos HTTP recibidos: {json_data}")
-        
-        # Si no estamos en modo mock, actualizar datos
-        if not use_mock_data and all(key in json_data for key in ["T", "PH", "C"]):
-            latest_data = {
-                "T": float(json_data["T"]),
-                "PH": float(json_data["PH"]),
-                "C": float(json_data["C"])
-            }
-            logger.info(f"Datos actualizados (HTTP): {latest_data}")
-            return JSONResponse(content={"status": "ok", "message": "Datos recibidos"})
-        else:
-            return JSONResponse(content={
-                "status": "info",
-                "message": f"Datos {'ignorados (modo mock activo)' if use_mock_data else 'incompletos'}"
-            })
+        # Use more efficient body parsing
+        content_length = request.headers.get("content-length", 0)
+        if int(content_length) > 0:
+            body = await request.body()
+            json_data = json.loads(body)
             
-    except json.JSONDecodeError:
-        logger.warning("JSON inválido recibido (HTTP)")
-        return JSONResponse(content={"status": "error", "message": "Formato JSON inválido"}, status_code=400)
+            # Minimal logging
+            logger.debug(f"Data received: {len(body)} bytes")
+            
+            # Update data if not in mock mode
+            if not use_mock_data and all(key in json_data for key in ["T", "PH", "C"]):
+                latest_data = {
+                    "T": float(json_data["T"]),
+                    "PH": float(json_data["PH"]),
+                    "C": float(json_data["C"])
+                }
+                
+                # Publish to clients immediately
+                asyncio.create_task(pubsub_endpoint.publish("water_data", latest_data))
+                
+                # Minimal response
+                return Response(status_code=200)
+            else:
+                return Response(status_code=202)  # Accepted but not processed
+                
     except Exception as e:
-        logger.error(f"Error en endpoint HTTP: {str(e)}")
-        return JSONResponse(content={"status": "error", "message": str(e)}, status_code=500)
-
+        logger.error(f"Error in HTTP endpoint: {str(e)}")
+        return Response(status_code=400)  # Minimal error response
 # Endpoint para publicadores (Arduino)
 async def publisher_endpoint(websocket: WebSocket):
     """Endpoint WebSocket para publicadores (Arduino)"""
@@ -104,6 +106,7 @@ async def publisher_endpoint(websocket: WebSocket):
         logger.info("Publicador desconectado")
     except Exception as e:
         logger.error(f"Error en WebSocket de publicador: {str(e)}")
+
 
 async def client_endpoint(websocket: WebSocket):
     """Endpoint WebSocket tradicional para clientes web"""
