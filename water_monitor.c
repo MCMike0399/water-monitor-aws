@@ -1,19 +1,19 @@
 /*
   Arduino Uno R4 WiFi - Sensor HTTP Client
   
-  Lee datos de sensores ADC (turbidez, pH, conductividad)
-  y los envía a un servidor mediante peticiones HTTP POST.
+  Reads ADC sensor data (turbidity, pH, conductivity)
+  and sends it to a server via HTTP POST requests.
 */
 
 #include "WiFiS3.h"
 #include <ArduinoJson.h>
 #include "arduino_secrets.h"
 
-// Definiciones para WiFi de arduino_secrets.h
+// WiFi credentials from arduino_secrets.h
 char ssid[] = SECRET_SSID;
 char pass[] = SECRET_PASS;
 
-// Definición de pines ADC
+// ADC Pin definitions
 #define TURBIDITY_PIN A0
 #define PH_PIN        A1
 #define CONDUCT_PIN   A2
@@ -23,52 +23,52 @@ const unsigned long RECONNECT_INTERVAL = 60000; // 1 minute
 unsigned long lastConnectionTime = 0;
 bool isConnected = false;
 
-// Configuración del servidor
+// Server configuration
 const char* server_host = "51.92.64.38";
 const int server_port = 8000;
 const char* server_path = "/water-monitor/publish";
 
-// Intervalo de actualización (milisegundos)
+// Update interval (milliseconds)
 const unsigned long UPDATE_INTERVAL = 1000;
 
-// Cliente WiFi
+// WiFi client
 WiFiClient client;
 
-// Variables globales
+// Global variables
 unsigned long lastUpdateTime = 0;
 int status = WL_IDLE_STATUS;
 
-// Prototipos de funciones
-uint16_t leer_adc(uint8_t pin);
-float convertir_turbidez(uint16_t raw);
-float convertir_ph(uint16_t raw);
-float convertir_salinidad(uint16_t raw);
-void conectar_wifi();
-void enviar_datos_sensores();
+// Function prototypes
+uint16_t read_adc(uint8_t pin);
+float convert_turbidity(uint16_t raw);
+float convert_ph(uint16_t raw);
+float convert_conductivity(uint16_t raw);
+void connect_wifi();
+void send_sensor_data();
 
 void setup() {
-  // Inicializar serial
+  // Initialize serial
   Serial.begin(9600);
   while (!Serial) {
-    ; // Esperar a que el puerto serial se conecte
+    ; // Wait for serial port to connect
   }
   
-  // Configurar ADC para resolución de 12 bits
+  // Configure ADC for 12-bit resolution
   analogReadResolution(12);
   
-  // Conectar a WiFi
-  conectar_wifi();
+  // Connect to WiFi
+  connect_wifi();
 }
 
 void loop() {
-  // Verificar conexión WiFi
+  // Check WiFi connection
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("Reconectando a WiFi...");
-    conectar_wifi();
+    Serial.println("Reconnecting to WiFi...");
+    connect_wifi();
     return;
   }
 
-   // Check server connection periodically
+  // Check server connection periodically
   if (USE_KEEP_ALIVE && isConnected) {
     unsigned long currentTime = millis();
     if (currentTime - lastConnectionTime >= RECONNECT_INTERVAL) {
@@ -78,79 +78,79 @@ void loop() {
     }
   }
   
-  // Verificar si es tiempo de enviar una actualización
+  // Check if it's time to send an update
   unsigned long currentTime = millis();
   if (currentTime - lastUpdateTime >= UPDATE_INTERVAL) {
     lastUpdateTime = currentTime;
-    enviar_datos_sensores();
+    send_sensor_data();
   }
 }
 
-void conectar_wifi() {
-  // Verificar el módulo WiFi
+void connect_wifi() {
+  // Check WiFi module
   if (WiFi.status() == WL_NO_MODULE) {
-    Serial.println("¡Fallo en comunicación con módulo WiFi!");
-    while (true); // No continuar
+    Serial.println("Communication with WiFi module failed!");
+    while (true); // Do not continue
   }
   
   String fv = WiFi.firmwareVersion();
   if (fv < WIFI_FIRMWARE_LATEST_VERSION) {
-    Serial.println("Por favor actualice el firmware");
+    Serial.println("Please update the firmware");
   }
   
-  // Intentar conectar a la red WiFi
+  // Try to connect to WiFi network
   while (status != WL_CONNECTED) {
-    Serial.print("Intentando conectar a SSID: ...");
+    Serial.print("Attempting to connect to SSID: ...");
     Serial.println(ssid);
     
-    // Para redes abiertas (sin contraseña)
+    // For open networks (no password)
     if (strlen(pass) == 0) {
       status = WiFi.begin(ssid);
     } else {
-      // Conectar a red WPA/WPA2
+      // Connect to WPA/WPA2 network
       status = WiFi.begin(ssid, pass);
     }
     
-    // Esperar para la conexión
+    // Wait for connection
     delay(5000);
   }
   
-  Serial.println("Conectado a WiFi");
+  Serial.println("Connected to WiFi");
   Serial.print("SSID: ");
   Serial.println(WiFi.SSID());
   IPAddress ip = WiFi.localIP();
-  Serial.print("Dirección IP: ");
+  Serial.print("IP Address: ");
   Serial.println(ip);
 }
 
-void enviar_datos_sensores() {
-  // Read sensors (keep existing code)
-  uint16_t turbidez_raw = leer_adc(TURBIDITY_PIN);
-  uint16_t ph_raw = leer_adc(PH_PIN);
-  uint16_t conductividad_raw = leer_adc(CONDUCT_PIN);
+void send_sensor_data() {
+  // Read sensors
+  uint16_t turbidity_raw = read_adc(TURBIDITY_PIN);
+  uint16_t ph_raw = read_adc(PH_PIN);
+  uint16_t conductivity_raw = read_adc(CONDUCT_PIN);
   
-  // Convert values (keep existing code)
-  float turbidez = convertir_turbidez(turbidez_raw);
-  float ph = convertir_ph(ph_raw);
-  float salinidad = convertir_salinidad(conductividad_raw);
+  // Convert values
+  float turbidity = convert_turbidity(turbidity_raw);
+  float ph = convert_ph(ph_raw);
+  float conductivity = convert_conductivity(conductivity_raw);
   
   // Reduce serial output frequency
   static int print_counter = 0;
   if (++print_counter >= 5) {
     print_counter = 0;
-    Serial.print("Datos: T:");
-    Serial.print(turbidez, 2);
+    Serial.print("Data: T:");
+    Serial.print(turbidity, 2);
     Serial.print(";PH:");
     Serial.print(ph, 2);
     Serial.print(";C:");
-    Serial.println(salinidad, 2);
+    Serial.println(conductivity, 2);
   }
   
-  // Create JSON (unchanged)
+  // Create JSON
   StaticJsonDocument<200> doc;
-  doc["T"] = round(turbidez * 100) / 100.0;
+  doc["T"] = round(turbidity * 100) / 100.0;
   doc["PH"] = round(ph * 100) / 100.0;
-  doc["C"] = round(salinidad * 100) / 100.0;
+  doc["C"] = round(conductivity * 100) / 100.0;
   
   String json;
   serializeJson(doc, json);
@@ -158,11 +158,11 @@ void enviar_datos_sensores() {
   // Manage connection
   if (!isConnected) {
     if (!client.connect(server_host, server_port)) {
-      Serial.println("Fallo en conexión al servidor");
+      Serial.println("Failed to connect to server");
       return;
     }
     isConnected = true;
-    Serial.println("Conectado al servidor");
+    Serial.println("Connected to server");
   }
   
   // Minimized HTTP request
@@ -204,8 +204,9 @@ void enviar_datos_sensores() {
     isConnected = false;
   }
 }
-// Función para leer ADC con promedio
-uint16_t leer_adc(uint8_t pin) {
+
+// Function to read ADC with averaging
+uint16_t read_adc(uint8_t pin) {
   uint32_t sum = 0;
   const int samples = 10;
   
@@ -217,17 +218,17 @@ uint16_t leer_adc(uint8_t pin) {
   return sum / samples;
 }
 
-// Función para convertir valor raw de turbidez (invertido)
-float convertir_turbidez(uint16_t raw) {
+// Function to convert raw turbidity value (inverted)
+float convert_turbidity(uint16_t raw) {
   return 1000.0 * (1.0 - (float)raw / 4095.0);
 }
 
-// Función para convertir valor raw de pH
-float convertir_ph(uint16_t raw) {
+// Function to convert raw pH value
+float convert_ph(uint16_t raw) {
   return 14.0 * ((float)raw / 4095.0);
 }
 
-// Función para convertir valor raw de salinidad
-float convertir_salinidad(uint16_t raw) {
+// Function to convert raw conductivity value
+float convert_conductivity(uint16_t raw) {
   return 1500.0 * ((float)raw / 4095.0);
 }

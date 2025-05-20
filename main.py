@@ -2,8 +2,7 @@ import uuid
 import time
 import os
 import uvicorn
-import traceback
-from fastapi import FastAPI, HTTPException, Request, status, Response
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from logging_config import get_logger, setup_logging
 from dotenv import load_dotenv
