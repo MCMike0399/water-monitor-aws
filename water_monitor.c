@@ -103,20 +103,21 @@ void conectar_wifi() {
     Serial.print("Intentando conectar a SSID: ");
     Serial.println(ssid);
     
-    // Conectar a red WPA/WPA2
-    status = WiFi.begin(ssid, pass);
+    // Para redes abiertas (sin contraseña)
+    if (strlen(pass) == 0) {
+      status = WiFi.begin(ssid);
+    } else {
+      // Conectar a red WPA/WPA2
+      status = WiFi.begin(ssid, pass);
+    }
     
-    // Esperar 10 segundos para la conexión
+    // Esperar para la conexión
     delay(5000);
   }
   
   Serial.println("Conectado a WiFi");
-  
-  // Imprimir estado de WiFi
   Serial.print("SSID: ");
   Serial.println(WiFi.SSID());
-  
-  // Imprimir dirección IP
   IPAddress ip = WiFi.localIP();
   Serial.print("Dirección IP: ");
   Serial.println(ip);
@@ -196,7 +197,7 @@ void enviar_datos_sensores() {
   while (client.available()) {
     client.read();
   }
-  
+
   // Handle connection based on keep-alive setting
   if (!USE_KEEP_ALIVE) {
     client.stop();

@@ -33,7 +33,16 @@ const THRESHOLDS = {
 
 // Inicializar gráficos separados
 function initCharts() {
-    // Gráfico de Turbidez
+    // Configuración común para todos los gráficos
+    const config = {
+        responsive: true,
+        displayModeBar: false, // Oculta la barra de herramientas
+        staticPlot: true,      // Esta es la clave: convierte el gráfico en estático
+        scrollZoom: false,     // Desactiva el zoom con scroll
+        doubleClick: false     // Desactiva la acción de doble clic
+    };
+
+    // Gráfico de Turbidez (mantén el resto igual, solo cambia la configuración)
     const turbidityTrace = {
         x: chartData.time,
         y: chartData.turbidity,
@@ -46,22 +55,22 @@ function initCharts() {
         title: 'Turbidez en Tiempo Real',
         margin: { l: 50, r: 20, t: 50, b: 80 },
         xaxis: {
-            title: { 
-                text: 'Tiempo',
-            },
-            showgrid: true
+            title: { text: 'Tiempo' },
+            showgrid: true,
+            fixedrange: true // Evita que el eje X se pueda ajustar
         },
         yaxis: {
             title: 'Turbidez (NTU)',
             titlefont: {color: '#3498db'},
             tickfont: {color: '#3498db'},
-            range: [0, 1000] // Rango actualizado para turbidez (0-1000 NTU)
+            range: [0, 1000],
+            fixedrange: true // Evita que el eje Y se pueda ajustar
         }
     };
 
-    Plotly.newPlot('turbidityChart', [turbidityTrace], turbidityLayout, {responsive: true});
+    Plotly.newPlot('turbidityChart', [turbidityTrace], turbidityLayout, config);
 
-    // Gráfico de pH
+    // Haz los mismos cambios para los otros dos gráficos (pH y Conductividad)
     const phTrace = {
         x: chartData.time,
         y: chartData.ph,
@@ -74,22 +83,21 @@ function initCharts() {
         title: 'pH en Tiempo Real',
         margin: { l: 50, r: 20, t: 50, b: 80 },
         xaxis: {
-            title: { 
-                text: 'Tiempo',
-            },
-            showgrid: true
+            title: { text: 'Tiempo' },
+            showgrid: true,
+            fixedrange: true // Evita que el eje X se pueda ajustar
         },
         yaxis: {
             title: 'pH',
             titlefont: {color: '#e74c3c'},
             tickfont: {color: '#e74c3c'},
-            range: [0, 14] // Rango exacto para pH (0-14)
+            range: [0, 14],
+            fixedrange: true // Evita que el eje Y se pueda ajustar
         }
     };
 
-    Plotly.newPlot('phChart', [phTrace], phLayout, {responsive: true});
+    Plotly.newPlot('phChart', [phTrace], phLayout, config);
 
-    // Gráfico de Conductividad
     const conductivityTrace = {
         x: chartData.time,
         y: chartData.conductivity,
@@ -102,22 +110,22 @@ function initCharts() {
         title: 'Conductividad en Tiempo Real',
         margin: { l: 60, r: 20, t: 50, b: 80 },
         xaxis: {
-            title: { 
-                text: 'Tiempo',
-                standoff: 20 // Espacio adicional para el título
-            },
-            showgrid: true
+            title: { text: 'Tiempo', standoff: 20 },
+            showgrid: true,
+            fixedrange: true // Evita que el eje X se pueda ajustar
         },
         yaxis: {
             title: 'Conductividad (μS/cm)',
             titlefont: {color: '#2ecc71'},
             tickfont: {color: '#2ecc71'},
-            range: [0, 1500] // Rango actualizado para conductividad (0-1500 μS/cm)
+            range: [0, 1500],
+            fixedrange: true // Evita que el eje Y se pueda ajustar
         }
     };
 
-    Plotly.newPlot('conductivityChart', [conductivityTrace], conductivityLayout, {responsive: true});
+    Plotly.newPlot('conductivityChart', [conductivityTrace], conductivityLayout, config);
 }
+
 
 // Función para actualizar gráficos con nuevos datos
 function updateCharts(data) {
