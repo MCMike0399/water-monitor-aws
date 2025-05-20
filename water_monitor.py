@@ -289,7 +289,7 @@ def register_routes(app: FastAPI):
     # Página de monitoreo actual
     @app.get("/water-monitor")
     async def get_water_monitor():
-        html_path = os.path.join(os.getcwd(), "static", "ws-client.html")
+        html_path = os.path.join(os.getcwd(), "static", "ws_client.html")
         if os.path.exists(html_path):
             return FileResponse(html_path)
         else:
